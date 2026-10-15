@@ -1,0 +1,86 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: quickdesk_auth
+      POSTGRES_USER: quickdesk
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quickdesk_pw}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quickdesk -d quickdesk_auth"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth-service:
+    build: ./auth-service
+    restart: unless-stopped
+    environment:
+      PORT: 4001
+      DATABASE_URL: postgres://quickdesk:${POSTGRES_PASSWORD:-quickdesk_pw}@postgres:5432/quickdesk_auth
+      JWT_SECRET: ${JWT_SECRET:-dev-only-jwt-secret}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-only-internal-key}
+      ADMIN_NAME: ${ADMIN_NAME:-QuickDesk Admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@quickdesk.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@12345}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:4001/auth/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  ticket-service:
+    build: ./ticket-service
+    restart: unless-stopped
+    environment:
+      PORT: 4002
+      MONGO_URI: mongodb://mongo:27017/quickdesk_tickets
+      JWT_SECRET: ${JWT_SECRET:-dev-only-jwt-secret}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-only-internal-key}
+      AUTH_SERVICE_URL: http://auth-service:4001
+    depends_on:
+      mongo:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:4002/tickets/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # The ONLY container exposed to the outside world.
+  gateway:
+    build: ./gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      AUTH_SERVICE_URL: http://auth-service:4001
+      TICKET_SERVICE_URL: http://ticket-service:4002
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      ticket-service:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  mongodata:

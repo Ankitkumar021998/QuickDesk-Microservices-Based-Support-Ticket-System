@@ -1,0 +1,20 @@
+{
+  "name": "quickdesk-ticket-service",
+  "version": "1.0.0",
+  "description": "QuickDesk Ticket Service - tickets, assignment, status tracking (MongoDB)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.11.2",
+    "morgan": "^1.12.1"
+  }
+}
